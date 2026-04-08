@@ -1,5 +1,4 @@
 # pylint:disable=C0114
-# файл обновлен
 import asyncio
 import threading
 import os
@@ -219,7 +218,7 @@ class TranslatorApp(App):
         Clock.schedule_interval(self.check_music_end, 0.8)
         return main_layout
 
-    # --- УНИВЕРСАЛЬНЫЙ UPDATER (WIN + ANDROID COPY) ---
+    # --- УНИВЕРСАЛЬНЫЙ UPDATER ---
     def start_update(self, *args):
         self._safe_status("Поиск...");
         threading.Thread(target=self._run_update, daemon=True).start()
@@ -242,9 +241,9 @@ class TranslatorApp(App):
 
     def _show_update_popup(self, old, new):
         content = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
-        msg = "На Windows обновится после закрытия.\nНа Android будет создан новый файл."
+        msg = "Обновление скачано!\nОно применится после перезапуска."
         content.add_widget(Label(text=msg, halign='center', font_name=DEFAULT_FONT, font_size='14sp'))
-        btn = Button(text="ПРИНЯТЬ", size_hint_y=None, height=dp(50), background_color=CLR_PLAY)
+        btn = Button(text="ОК", size_hint_y=None, height=dp(50), background_color=CLR_PLAY)
         popup = Popup(title="Обновление", content=content, size_hint=(0.8, 0.4))
         btn.bind(on_release=lambda x: [self._prepare_silent_update(old, new), popup.dismiss()])
         content.add_widget(btn);
@@ -252,28 +251,29 @@ class TranslatorApp(App):
 
     def _prepare_silent_update(self, old, new):
         if os.name == 'nt':
-            # Логика Windows (Батник)
+            # Логика Windows
             bat = "silent_upd.bat"
             with open(bat, "w", encoding='utf-8') as f:
                 f.write(
                     f'@echo off\n:loop\ntasklist | find /i "{os.path.basename(sys.executable)}" >nul\nif not errorlevel 1 (\n  timeout /t 3 >nul\n  goto loop\n)\nmove /y "{new}" "{old}"\ndel "%~f0"')
             subprocess.Popen([bat], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
         else:
-            # Логика Android/Pydroid (Создание копии с цифрой)
+            # Логика Android/Pydroid: Сохранение как translator_kivy1.py, translator_kivy2.py...
             try:
-                base, ext = os.path.splitext(old)
+                base_name = "translator_kivy"
+                ext = ".py"
+                folder = os.path.dirname(old)
                 counter = 1
-                # Ищем свободное имя типа translator_kivy1.py, translator_kivy2.py...
                 while True:
-                    target_name = f"{base}{counter}{ext}"
-                    if not os.path.exists(target_name):
+                    target_path = os.path.join(folder, f"{base_name}{counter}{ext}")
+                    if not os.path.exists(target_path):
                         break
                     counter += 1
 
                 if os.path.exists(new):
-                    os.rename(new, target_name)
-                    self._safe_status(f"Сохранено в {os.path.basename(target_name)}")
-            except Exception as e:
+                    os.rename(new, target_path)
+                    self._safe_status(f"Создан {os.path.basename(target_path)}")
+            except:
                 self._safe_status("Ошибка сохранения")
 
     # --- ОСТАЛЬНАЯ ЛОГИКА ---
