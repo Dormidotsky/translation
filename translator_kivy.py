@@ -8,7 +8,7 @@ import edge_tts
 import zipfile
 import requests
 import io
-import sys
+import syshttps://github.com/Dormidotsky/translation/pulse
 import subprocess
 import random
 from deep_translator import GoogleTranslator
@@ -117,7 +117,7 @@ class TranslatorApp(App):
         
         self.lang_btn = Button(text=f"ЯЗЫК: {self.target_lang_name}", size_hint_x=0.85, background_color=CLR_NAV, font_name=DEFAULT_FONT, bold=True)
         self.lang_btn.bind(on_release=self.open_lang_menu)
-        self.update_btn = Button(text="X", size_hint_x=0.15, background_color=CLR_UPDATE, bold=True)
+        self.update_btn = Button(text="U", size_hint_x=0.15, background_color=CLR_UPDATE, bold=True)
         self.update_btn.bind(on_release=self.start_update)
         
         header_row.add_widget(self.lang_btn); header_row.add_widget(self.update_btn)
