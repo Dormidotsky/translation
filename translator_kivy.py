@@ -10,6 +10,7 @@ import requests
 import io
 import sys
 import subprocess
+import random
 from deep_translator import GoogleTranslator
 
 from kivy.config import Config
@@ -44,8 +45,8 @@ CLR_PUSH = get_color_from_hex('#8e44ad')
 CLR_PULL = get_color_from_hex('#2980b9')
 CLR_UPDATE = get_color_from_hex('#f39c12')
 
-# САМАЯ НАДЕЖНАЯ ССЫЛКА (RAW)
-UPDATE_URL = "https://raw.githubusercontent.com/Dormidotsky/translation/main/translator_kivy.py"
+# Ссылка без refs/heads/ для стабильности
+UPDATE_URL_BASE = "https://raw.githubusercontent.com/Dormidotsky/translation/main/translator_kivy.py"
 
 BOT_TOKEN = "8428105397:AAHGwEIEYqnhUP94vmReTso1Zdf00eLR5HY"
 CHAT_ID = "5741118439"
@@ -122,70 +123,58 @@ class TranslatorApp(App):
 
         main_layout = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(5))
 
-        # --- ВЕРХНЯЯ ЧАСТЬ ---
         top_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(220), spacing=dp(5))
-
         header_row = BoxLayout(size_hint_y=None, height=dp(45), spacing=dp(5))
-        self.lang_btn = Button(
-            text=f"ЯЗЫК: {self.target_lang_name}", size_hint_x=0.88,
-            background_color=CLR_NAV, font_name=DEFAULT_FONT, font_size='16sp', bold=True
-        )
+        self.lang_btn = Button(text=f"ЯЗЫК: {self.target_lang_name}", size_hint_x=0.85, background_color=CLR_NAV,
+                               font_name=DEFAULT_FONT, bold=True)
         self.lang_btn.bind(on_release=self.open_lang_menu)
-
-        self.update_btn = Button(
-            text="UPD", size_hint_x=0.12,
-            background_color=CLR_UPDATE, font_size='10sp', bold=True
-        )
+        self.update_btn = Button(text="новый", size_hint_x=0.15, background_color=CLR_UPDATE, bold=True)
         self.update_btn.bind(on_release=self.start_update)
-
-        header_row.add_widget(self.lang_btn)
+        header_row.add_widget(self.lang_btn);
         header_row.add_widget(self.update_btn)
 
         self.target_input = TextInput(hint_text="Текст...", font_name=DEFAULT_FONT, font_size='18sp', multiline=False)
         self.rus_input = TextInput(hint_text="Русский...", font_name=DEFAULT_FONT, font_size='18sp', multiline=False)
         self.search_input = TextInput(hint_text="Поиск...", font_name=DEFAULT_FONT, font_size='16sp', multiline=False)
         self.search_input.bind(text=self.filter_history)
-
-        top_box.add_widget(header_row)
-        top_box.add_widget(self.target_input)
-        top_box.add_widget(self.rus_input)
+        top_box.add_widget(header_row);
+        top_box.add_widget(self.target_input);
+        top_box.add_widget(self.rus_input);
         top_box.add_widget(self.search_input)
         main_layout.add_widget(top_box)
 
-        # --- КНОПКИ УПРАВЛЕНИЯ ---
         controls_row = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(3))
-        self.btn_start = Button(text="ALL", background_color=CLR_PLAY, bold=True, font_size='10sp', size_hint_x=0.12)
+        self.btn_start = Button(text="ALL", background_color=CLR_PLAY, bold=True, size_hint_x=0.12)
         self.btn_start.bind(on_release=self.start_playlist)
-        self.btn_stop = Button(text="OFF", background_color=CLR_DANGER, bold=True, font_size='10sp', size_hint_x=0.12)
+        self.btn_stop = Button(text="OFF", background_color=CLR_DANGER, bold=True, size_hint_x=0.12)
         self.btn_stop.bind(on_release=self.stop_playlist)
-        btn_push = Button(text="PUSH", background_color=CLR_PUSH, bold=True, font_size='10sp', size_hint_x=0.13)
+        btn_push = Button(text="PUSH", background_color=CLR_PUSH, bold=True, size_hint_x=0.13);
         btn_push.bind(on_release=self.cloud_push)
-        btn_pull = Button(text="PULL", background_color=CLR_PULL, bold=True, font_size='10sp', size_hint_x=0.13)
+        btn_pull = Button(text="PULL", background_color=CLR_PULL, bold=True, size_hint_x=0.13);
         btn_pull.bind(on_release=self.cloud_pull)
         gender_box = BoxLayout(spacing=dp(2), size_hint_x=0.22)
-        self.btn_m = ToggleButton(text='М', group='g', state='down', font_size='11sp', background_color=CLR_MAIN)
-        self.btn_f = ToggleButton(text='Ж', group='g', font_size='11sp', background_color=CLR_DARK)
+        self.btn_m = ToggleButton(text='М', group='g', state='down', background_color=CLR_MAIN);
         self.btn_m.bind(on_press=lambda x: self.set_gender('male'))
+        self.btn_f = ToggleButton(text='Ж', group='g', background_color=CLR_DARK);
         self.btn_f.bind(on_press=lambda x: self.set_gender('female'))
         gender_box.add_widget(self.btn_m);
         gender_box.add_widget(self.btn_f)
         self.speed_slider = Slider(min=-50, max=50, value=0, size_hint_x=0.28)
         controls_row.add_widget(self.btn_start);
-        controls_row.add_widget(self.btn_stop)
+        controls_row.add_widget(self.btn_stop);
         controls_row.add_widget(btn_push);
-        controls_row.add_widget(btn_pull)
+        controls_row.add_widget(btn_pull);
         controls_row.add_widget(gender_box);
         controls_row.add_widget(self.speed_slider)
         main_layout.add_widget(controls_row)
 
-        # --- СПИСОК СЛОВ ---
         list_area = BoxLayout(orientation='horizontal', spacing=dp(5))
         nav_panel = BoxLayout(orientation='vertical', size_hint_x=None, width=dp(45), spacing=dp(2))
-        btn_up = Button(text="^", background_color=CLR_NAV, bold=True)
+        btn_up = Button(text="^", background_color=CLR_NAV);
         btn_up.bind(on_press=self.scroll_up)
-        self.scroll_slider = Slider(orientation='vertical', min=0, max=1, value=1)
+        self.scroll_slider = Slider(orientation='vertical', min=0, max=1, value=1);
         self.scroll_slider.bind(value=self.on_slider_scroll)
-        btn_down = Button(text="v", background_color=CLR_NAV, bold=True)
+        btn_down = Button(text="v", background_color=CLR_NAV);
         btn_down.bind(on_press=self.scroll_down)
         nav_panel.add_widget(btn_up);
         nav_panel.add_widget(self.scroll_slider);
@@ -193,34 +182,31 @@ class TranslatorApp(App):
 
         self.history_container = BoxLayout(orientation='vertical', size_hint_y=None, spacing=dp(5))
         self.history_container.bind(minimum_height=self.history_container.setter('height'))
-        self.scroll_view = ScrollView(do_scroll_x=False, do_scroll_y=True)
+        self.scroll_view = ScrollView(do_scroll_x=False, do_scroll_y=True);
         self.scroll_view.bind(scroll_y=self.on_view_scroll)
         self.scroll_view.add_widget(self.history_container)
         list_area.add_widget(nav_panel);
         list_area.add_widget(self.scroll_view)
         main_layout.add_widget(list_area)
 
-        # --- СТАТУС ---
         self.status_container = BoxLayout(size_hint_y=None, height=dp(30))
         with self.status_container.canvas.before:
             Color(0.1, 0.1, 0.1, 1);
             self.rect = Rectangle(size=self.status_container.size, pos=self.status_container.pos)
-        self.status_container.bind(size=self._update_rect, pos=self._update_rect)
         self.status_label = Label(text="Готов", font_name=DEFAULT_FONT, font_size='13sp')
-        self.status_container.add_widget(self.status_label)
+        self.status_container.add_widget(self.status_label);
         main_layout.add_widget(self.status_container)
 
-        # --- ДЕЙСТВИЯ ---
         action_btns = BoxLayout(size_hint_y=None, height=dp(90), orientation='vertical', spacing=dp(4))
         r1 = BoxLayout(spacing=dp(5));
         r2 = BoxLayout(spacing=dp(5))
-        btn_t = Button(text="ПЕРЕВОД", background_color=CLR_MAIN, font_name=DEFAULT_FONT)
-        btn_l = Button(text="СЛУШАТЬ", background_color=get_color_from_hex('#9b59b6'), font_name=DEFAULT_FONT)
-        btn_s = Button(text="СОХРАНИТЬ", background_color=get_color_from_hex('#27ae60'), font_name=DEFAULT_FONT)
-        btn_c = Button(text="ОЧИСТИТЬ", background_color=get_color_from_hex('#7f8c8d'), font_name=DEFAULT_FONT)
-        btn_t.bind(on_release=self.do_translate);
+        btn_t = Button(text="ПЕРЕВОД", background_color=CLR_MAIN, font_name=DEFAULT_FONT);
+        btn_t.bind(on_release=self.do_translate)
+        btn_l = Button(text="СЛУШАТЬ", background_color=get_color_from_hex('#9b59b6'), font_name=DEFAULT_FONT);
         btn_l.bind(on_release=self.live_listen)
-        btn_s.bind(on_release=self.save_and_add);
+        btn_s = Button(text="СОХРАНИТЬ", background_color=get_color_from_hex('#27ae60'), font_name=DEFAULT_FONT);
+        btn_s.bind(on_release=self.save_and_add)
+        btn_c = Button(text="ОЧИСТИТЬ", background_color=get_color_from_hex('#7f8c8d'), font_name=DEFAULT_FONT);
         btn_c.bind(on_release=self.clear_inputs_only)
         r1.add_widget(btn_t);
         r1.add_widget(btn_l);
@@ -234,84 +220,105 @@ class TranslatorApp(App):
         Clock.schedule_interval(self.check_music_end, 0.8)
         return main_layout
 
-    # --- ЛОГИКА ОБНОВЛЕНИЯ (УСИЛЕННАЯ) ---
+    # --- UPDATER (V3 - ANTI-CACHE) ---
     def start_update(self, *args):
-        self._safe_status("Поиск обновлений...")
+        self._safe_status("Загрузка...")
         threading.Thread(target=self._run_update, daemon=True).start()
 
     def _run_update(self):
         try:
-            headers = {'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'}
-            resp = requests.get(UPDATE_URL, headers=headers, timeout=15)
+            # Кэш-киллер (случайное число в URL)
+            cache_killer = f"?v={random.randint(1, 999999)}"
+            url = UPDATE_URL_BASE + cache_killer
+
+            headers = {
+                'User-Agent': 'Mozilla/5.0',
+                'Cache-Control': 'no-cache, no-store, must-revalidate',
+                'Pragma': 'no-cache',
+                'Accept': 'text/plain'
+            }
+
+            resp = requests.get(url, headers=headers, timeout=15)
 
             if resp.status_code == 200:
                 content = resp.content
-                # Проверка: если в начале HTML теги — это ошибка ссылки
-                if b"<!DOCTYPE html>" in content or b"<html" in content:
-                    self._safe_status("Ошибка: Ссылка ведет на HTML")
+                text_content = resp.text
+
+                # Проверки
+                if "<html" in text_content.lower():
+                    self._safe_status("Ошибка: Получен HTML")
                     return
 
-                # Проверка на адекватный размер кода
-                if len(content) < 10000:
-                    self._safe_status(f"Слишком мал: {len(content)} б")
+                if "TranslatorApp" not in text_content:
+                    self._safe_status("Ошибка: Неверный файл")
                     return
 
+                # Сохранение
                 curr_file = os.path.abspath(sys.argv[0])
                 new_file = curr_file + ".new"
-
                 with open(new_file, 'wb') as f:
                     f.write(content)
 
                 self._safe_status("Успех! Перезапуск...")
                 Clock.schedule_once(lambda dt: self._apply_update(curr_file, new_file))
             else:
-                self._safe_status(f"Ошибка сервера: {resp.status_code}")
+                self._safe_status(f"Ошибка {resp.status_code}")
         except Exception as e:
-            self._safe_status(f"Ошибка сети: {str(e)[:15]}")
+            self._safe_status("Ошибка сети")
 
     def _apply_update(self, old, new):
         try:
             if os.name == 'nt':
-                bat_path = "updater.bat"
-                with open(bat_path, "w", encoding='utf-8') as f:
-                    f.write(f'@echo off\nchcp 65001 > nul\n')
-                    f.write(f'timeout /t 1 /nobreak > nul\n')
-                    f.write(f'move /y "{new}" "{old}"\n')
-                    f.write(f'start "" python "{old}"\n')
-                    f.write(f'del "%~f0"\n')
-                os.startfile(bat_path)
+                bat = "upd.bat"
+                with open(bat, "w", encoding='utf-8') as f:
+                    f.write(
+                        f'@echo off\ntimeout /t 1 > nul\nmove /y "{new}" "{old}"\nstart "" python "{old}"\ndel "%~f0"')
+                os.startfile(bat)
             else:
                 os.replace(new, old)
                 subprocess.Popen([sys.executable, old])
             App.get_running_app().stop()
         except:
-            self._safe_status("Замените файл вручную")
+            pass
 
-    # --- ВСЕ ОСТАЛЬНЫЕ ФУНКЦИИ ---
-    def scroll_up(self, *args):
-        if self.history_container.height > self.scroll_view.height:
-            step = dp(85) / self.history_container.height
-            self.scroll_view.scroll_y = min(1, self.scroll_view.scroll_y + step)
+    # --- ЛОГИКА ---
+    def _init_audio(self):
+        try:
+            pygame.mixer.init()
+        except:
+            pass
 
-    def scroll_down(self, *args):
-        if self.history_container.height > self.scroll_view.height:
-            step = dp(85) / self.history_container.height
-            self.scroll_view.scroll_y = max(0, self.scroll_view.scroll_y - step)
+    def load_dictionary(self):
+        self.history_container.clear_widgets()
+        d_f, _ = self.get_paths()
+        if os.path.exists(d_f):
+            with open(d_f, 'r', encoding='utf-8') as f:
+                for line in reversed(f.readlines()):
+                    if "—" in line:
+                        t, r = line.replace('•', '').strip().split('—')
+                        self.history_container.add_widget(
+                            DictionaryItem(t.strip(), r.strip(), self.play_from_history, self.confirm_delete))
 
-    def on_slider_scroll(self, inst, val):
-        if abs(self.scroll_view.scroll_y - val) > 0.001:
-            self.scroll_view.scroll_y = val
+    def do_translate(self, *args):
+        t, r = self.target_input.text.strip(), self.rus_input.text.strip()
+        c = LANG_CONFIG[self.target_lang_name]["code"]
+        if t:
+            threading.Thread(target=self._run_trans, args=(t, 'ru', c), daemon=True).start()
+        elif r:
+            threading.Thread(target=self._run_trans, args=(r, c, 'ru'), daemon=True).start()
 
-    def on_view_scroll(self, inst, val):
-        if abs(self.scroll_slider.value - val) > 0.001:
-            self.scroll_slider.value = val
+    def _run_trans(self, text, dest, src):
+        try:
+            res = GoogleTranslator(source=src, target=dest).translate(text)
+            Clock.schedule_once(lambda dt: self._upd_ui_trans(res, dest))
+        except:
+            pass
 
-    def _play_audio(self, path):
-        if os.path.exists(path):
-            try:
-                pygame.mixer.music.load(path); pygame.mixer.music.play()
-            except:
-                pass
+    def _upd_ui_trans(self, text, dest):
+        if dest == 'ru':
+            self.rus_input.text = text
+        else:
+            self.target_input.text = text
 
     def live_listen(self, *args):
         t, r = self.target_input.text.strip(), self.rus_input.text.strip()
@@ -373,14 +380,10 @@ class TranslatorApp(App):
                     for r, _, fs in os.walk(e_d):
                         for f in fs: zf.write(os.path.join(r, f))
             zip_buf.seek(0)
-            r = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
-                              files={'document': (f"backup_{LANG_CONFIG[self.target_lang_name]['code']}.zip", zip_buf)},
-                              data={'chat_id': CHAT_ID})
-            if r.status_code == 200:
-                mid = r.json()['result']['message_id']
-                requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/pinChatMessage",
-                              data={'chat_id': CHAT_ID, 'message_id': mid})
-                self._safe_status("Cloud Up!")
+            requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
+                          files={'document': (f"backup_{LANG_CONFIG[self.target_lang_name]['code']}.zip", zip_buf)},
+                          data={'chat_id': CHAT_ID})
+            self._safe_status("Cloud Up!")
         except:
             self._safe_status("Push Error")
 
@@ -400,6 +403,31 @@ class TranslatorApp(App):
             self._safe_status("Sync OK")
         except:
             self._safe_status("Pull Error")
+
+    def start_playlist(self, *args):
+        if not self.history_container.children: return
+        self.is_playlist_playing = True;
+        self.btn_start.background_color = CLR_DARK;
+        self.current_play_index = len(self.history_container.children) - 1;
+        self.play_next_in_playlist()
+
+    def stop_playlist(self, *args):
+        self.is_playlist_playing = False; self.btn_start.background_color = CLR_PLAY; pygame.mixer.music.stop()
+
+    def play_next_in_playlist(self, dt=None):
+        if not self.is_playlist_playing: return
+        itms = self.history_container.children
+        if self.current_play_index < 0: self.stop_playlist(); return
+        itm = itms[self.current_play_index]
+        if itm.height > dp(10):
+            self.play_from_history(itm.target_text)
+        else:
+            self.current_play_index -= 1; self.play_next_in_playlist()
+
+    def check_music_end(self, dt):
+        if self.is_playlist_playing and not pygame.mixer.music.get_busy():
+            self.current_play_index -= 1;
+            Clock.schedule_once(self.play_next_in_playlist, 0.6)
 
     def actual_delete(self, item):
         self.history_container.remove_widget(item)
@@ -424,7 +452,7 @@ class TranslatorApp(App):
         ok = Button(text="ДА", background_color=CLR_DANGER);
         no = Button(text="НЕТ", background_color=CLR_NAV)
         btns.add_widget(ok);
-        btns.add_widget(no)
+        btns.add_widget(no);
         content.add_widget(btns)
         p = Popup(title="?", content=content, size_hint=(0.6, 0.3));
         no.bind(on_release=p.dismiss)
@@ -432,75 +460,15 @@ class TranslatorApp(App):
         p.open()
 
     def play_from_history(self, text):
-        _, e_d = self.get_paths()
-        p = os.path.join(e_d, f"{self._get_clean_filename(text)}.mp3")
+        _, e_d = self.get_paths();
+        p = os.path.join(e_d, f"{self._get_clean_filename(text)}.mp3");
         self._play_audio(p)
-
-    def start_playlist(self, *args):
-        if not self.history_container.children: return
-        self.is_playlist_playing = True;
-        self.btn_start.background_color = CLR_DARK
-        self.current_play_index = len(self.history_container.children) - 1
-        self.play_next_in_playlist()
-
-    def stop_playlist(self, *args):
-        self.is_playlist_playing = False;
-        self.btn_start.background_color = CLR_PLAY;
-        pygame.mixer.music.stop()
-
-    def play_next_in_playlist(self, dt=None):
-        if not self.is_playlist_playing: return
-        itms = self.history_container.children
-        if self.current_play_index < 0: self.stop_playlist(); return
-        itm = itms[self.current_play_index]
-        if itm.height > dp(10):
-            self.play_from_history(itm.target_text); self._safe_status(f">> {itm.target_text}")
-        else:
-            self.current_play_index -= 1; self.play_next_in_playlist()
-
-    def check_music_end(self, dt):
-        if self.is_playlist_playing and not pygame.mixer.music.get_busy():
-            self.current_play_index -= 1;
-            Clock.schedule_once(self.play_next_in_playlist, 0.6)
-
-    def load_dictionary(self):
-        self.history_container.clear_widgets()
-        d_f, _ = self.get_paths()
-        if os.path.exists(d_f):
-            with open(d_f, 'r', encoding='utf-8') as f:
-                for line in reversed(f.readlines()):
-                    if "—" in line:
-                        t, r = line.replace('•', '').strip().split('—')
-                        self.history_container.add_widget(
-                            DictionaryItem(t.strip(), r.strip(), self.play_from_history, self.confirm_delete))
-
-    def do_translate(self, *args):
-        t, r = self.target_input.text.strip(), self.rus_input.text.strip()
-        c = LANG_CONFIG[self.target_lang_name]["code"]
-        if t:
-            threading.Thread(target=self._run_trans, args=(t, 'ru', c), daemon=True).start()
-        elif r:
-            threading.Thread(target=self._run_trans, args=(r, c, 'ru'), daemon=True).start()
-
-    def _run_trans(self, text, dest, src):
-        try:
-            res = GoogleTranslator(source=src, target=dest).translate(text)
-            Clock.schedule_once(lambda dt: self._upd_ui_trans(res, dest))
-        except:
-            pass
-
-    def _upd_ui_trans(self, text, dest):
-        if dest == 'ru':
-            self.rus_input.text = text
-        else:
-            self.target_input.text = text
 
     def _get_clean_filename(self, text):
         return re.sub(r'[^\w\s\u10A0-\u10FF-]', '', text).strip()[:30]
 
     def get_paths(self):
-        c = LANG_CONFIG[self.target_lang_name]["code"]
-        return f'dictionary_{c}.txt', f'exports_{c}'
+        c = LANG_CONFIG[self.target_lang_name]["code"]; return f'dictionary_{c}.txt', f'exports_{c}'
 
     def open_lang_menu(self, *args):
         cnt = GridLayout(cols=1, spacing=dp(5), padding=dp(5))
@@ -512,24 +480,18 @@ class TranslatorApp(App):
         p.open()
 
     def set_language(self, lng):
-        self.target_lang_name = lng;
-        self.lang_btn.text = f"ЯЗЫК: {lng}";
-        self.load_dictionary()
+        self.target_lang_name = lng; self.lang_btn.text = f"ЯЗЫК: {lng}"; self.load_dictionary()
 
     def filter_history(self, inst, val):
         s = val.lower()
         for c in self.history_container.children:
             if s in f"{c.target_text} {c.rus_text}".lower():
-                c.height = c.play_btn.height;
-                c.opacity = 1;
-                c.disabled = False
+                c.height = c.play_btn.height; c.opacity = 1; c.disabled = False
             else:
                 c.height = 0; c.opacity = 0; c.disabled = True
 
     def set_gender(self, g):
-        self.gender = g
-        self.btn_m.background_color = CLR_MAIN if g == 'male' else CLR_DARK
-        self.btn_f.background_color = CLR_ACCENT if g == 'female' else CLR_DARK
+        self.gender = g; self.btn_m.background_color = CLR_MAIN if g == 'male' else CLR_DARK; self.btn_f.background_color = CLR_ACCENT if g == 'female' else CLR_DARK
 
     def clear_inputs_only(self, *args):
         self.target_input.text = ""; self.rus_input.text = ""
@@ -540,11 +502,19 @@ class TranslatorApp(App):
     def _safe_status(self, txt):
         Clock.schedule_once(lambda dt: setattr(self.status_label, 'text', txt))
 
-    def _init_audio(self):
-        try:
-            pygame.mixer.init()
-        except:
-            pass
+    def scroll_up(self, *args):
+        if self.history_container.height > self.scroll_view.height: self.scroll_view.scroll_y = min(1,
+                                                                                                    self.scroll_view.scroll_y + 0.1)
+
+    def scroll_down(self, *args):
+        if self.history_container.height > self.scroll_view.height: self.scroll_view.scroll_y = max(0,
+                                                                                                    self.scroll_view.scroll_y - 0.1)
+
+    def on_slider_scroll(self, inst, val):
+        if abs(self.scroll_view.scroll_y - val) > 0.01: self.scroll_view.scroll_y = val
+
+    def on_view_scroll(self, inst, val):
+        if abs(self.scroll_slider.value - val) > 0.01: self.scroll_slider.value = val
 
 
 if __name__ == '__main__':
