@@ -9,6 +9,7 @@ import zipfile
 import requests
 import io
 import sys
+import subprocess
 from deep_translator import GoogleTranslator
 
 from kivy.config import Config
@@ -43,7 +44,8 @@ CLR_PUSH = get_color_from_hex('#8e44ad')
 CLR_PULL = get_color_from_hex('#2980b9')
 CLR_UPDATE = get_color_from_hex('#f39c12')
 
-DRIVE_FILE_ID = "1LQUHDIWGrb9QNtF15xFLF2ouuOIHrjlt"
+# Ваша ссылка на GitHub Raw
+UPDATE_URL = "https://raw.githubusercontent.com/Dormidotsky/translation/refs/heads/main/translator_kivy.py"
 
 BOT_TOKEN = "8428105397:AAHGwEIEYqnhUP94vmReTso1Zdf00eLR5HY"
 CHAT_ID = "5741118439"
@@ -137,7 +139,7 @@ class TranslatorApp(App):
         self.update_btn.bind(on_release=self.start_update)
 
         header_row.add_widget(self.lang_btn)
-        header_row.add_widget(self.update_btn)  # ИСПРАВЛЕНО ЗДЕСЬ
+        header_row.add_widget(self.update_btn)
 
         self.target_input = TextInput(hint_text="Текст...", font_name=DEFAULT_FONT, font_size='18sp', multiline=False)
         self.rus_input = TextInput(hint_text="Русский...", font_name=DEFAULT_FONT, font_size='18sp', multiline=False)
@@ -232,63 +234,63 @@ class TranslatorApp(App):
         Clock.schedule_interval(self.check_music_end, 0.8)
         return main_layout
 
-    # --- ЛОГИКА ОБНОВЛЕНИЯ ---
+    # --- ЛОГИКА ОБНОВЛЕНИЯ (GITHUB) ---
     def start_update(self, *args):
-        self._safe_status("Загрузка...")
+        self._safe_status("Поиск обновлений...")
         threading.Thread(target=self._run_update, daemon=True).start()
 
     def _run_update(self):
         try:
-            session = requests.Session()
-            url = "https://drive.google.com/uc?export=download"
-            # Пробуем получить токен подтверждения
-            resp = session.get(url, params={'id': DRIVE_FILE_ID}, stream=True)
-
-            confirm = None
-            for k, v in resp.cookies.items():
-                if k.startswith('download_warning'):
-                    confirm = v
-                    break
-
-            if not confirm:
-                m = re.search(r'confirm=([0-9A-Za-z_]+)', resp.text)
-                if m: confirm = m.group(1)
-
-            if confirm:
-                resp = session.get(url, params={'id': DRIVE_FILE_ID, 'confirm': confirm}, stream=True)
+            # Используем заголовок браузера, чтобы избежать блокировок
+            headers = {'User-Agent': 'Mozilla/5.0'}
+            resp = requests.get(UPDATE_URL, headers=headers, timeout=15)
 
             if resp.status_code == 200:
+                content = resp.content
+                # Проверка: если в начале HTML теги, значит ссылка ведет не на Raw файл
+                if b"<html" in content.lower() or b"<!doctype" in content.lower():
+                    self._safe_status("Ошибка: Получен HTML код")
+                    return
+
+                if len(content) < 5000:
+                    self._safe_status(f"Слишком мал: {len(content)} б")
+                    return
+
                 curr_file = os.path.abspath(sys.argv[0])
                 new_file = curr_file + ".new"
 
                 with open(new_file, 'wb') as f:
-                    for chunk in resp.iter_content(chunk_size=8192):
-                        if chunk: f.write(chunk)
-
-                if os.path.getsize(new_file) < 5000:
-                    os.remove(new_file)
-                    self._safe_status("Ошибка: Файл пустой")
-                    return
+                    f.write(content)
 
                 self._safe_status("Успех! Перезапуск...")
                 Clock.schedule_once(lambda dt: self._apply_update(curr_file, new_file))
             else:
-                self._safe_status(f"HTTP Error {resp.status_code}")
+                self._safe_status(f"Ошибка сервера: {resp.status_code}")
         except Exception:
-            self._safe_status("Ошибка обновления")
+            self._safe_status("Ошибка сети")
 
     def _apply_update(self, old, new):
         try:
-            os.replace(new, old)
-            App.get_running_app().stop()
+            # Для Windows создаем скрипт-посредник для замены файла
             if os.name == 'nt':
-                os.startfile(old)
+                bat_path = "update_script.bat"
+                with open(bat_path, "w", encoding='cp866') as f:
+                    f.write(f'@echo off\n')
+                    f.write(f'timeout /t 2 /nobreak > nul\n')
+                    f.write(f'move /y "{new}" "{old}"\n')
+                    f.write(f'start "" python "{old}"\n')
+                    f.write(f'del "%~f0"\n')
+                os.startfile(bat_path)
             else:
-                os.system(f"python {old} &")
-        except:
-            self._safe_status("Ошибка замены файла")
+                # Для Linux/Android/MacOS
+                os.replace(new, old)
+                subprocess.Popen([sys.executable, old])
 
-    # --- ВСПОМОГАТЕЛЬНОЕ ---
+            App.get_running_app().stop()
+        except Exception as e:
+            self._safe_status("Замените файл вручную")
+
+    # --- ОСТАЛЬНАЯ ЛОГИКА ---
     def scroll_up(self, *args):
         if self.history_container.height > self.scroll_view.height:
             step = dp(85) / self.history_container.height
@@ -310,8 +312,7 @@ class TranslatorApp(App):
     def _play_audio(self, path):
         if os.path.exists(path):
             try:
-                pygame.mixer.music.load(path)
-                pygame.mixer.music.play()
+                pygame.mixer.music.load(path); pygame.mixer.music.play()
             except:
                 pass
 
@@ -324,23 +325,19 @@ class TranslatorApp(App):
 
     def _run_live(self, t, r, p):
         rate = f"{int(self.speed_slider.value):+d}%"
-        if asyncio.run(self._gen_audio(t, r, rate, p)):
-            Clock.schedule_once(lambda dt: self._play_audio(p))
+        if asyncio.run(self._gen_audio(t, r, rate, p)): Clock.schedule_once(lambda dt: self._play_audio(p))
 
     def save_and_add(self, *args):
         if self.is_saving: return
         t, r = self.target_input.text.strip(), self.rus_input.text.strip()
-        if t and r:
-            self.is_saving = True
-            threading.Thread(target=self._run_save, args=(t, r), daemon=True).start()
+        if t and r: self.is_saving = True; threading.Thread(target=self._run_save, args=(t, r), daemon=True).start()
 
     def _run_save(self, t, r):
         _, e_d = self.get_paths()
         if not os.path.exists(e_d): os.makedirs(e_d)
         p = os.path.join(e_d, f"{self._get_clean_filename(t)}.mp3")
         rate = f"{int(self.speed_slider.value):+d}%"
-        if asyncio.run(self._gen_audio(t, r, rate, p)):
-            Clock.schedule_once(lambda dt: self._fin_save(t, r))
+        if asyncio.run(self._gen_audio(t, r, rate, p)): Clock.schedule_once(lambda dt: self._fin_save(t, r))
         self.is_saving = False
 
     async def _gen_audio(self, t, r, rate, path):
@@ -360,10 +357,9 @@ class TranslatorApp(App):
 
     def _fin_save(self, t, r):
         d_f, _ = self.get_paths()
-        with open(d_f, 'a', encoding='utf-8') as f:
-            f.write(f"• {t} — {r}\n")
-        self.load_dictionary()
-        self.clear_inputs_only()
+        with open(d_f, 'a', encoding='utf-8') as f: f.write(f"• {t} — {r}\n")
+        self.load_dictionary();
+        self.clear_inputs_only();
         self._safe_status("Сохранено")
 
     def cloud_push(self, *args):
@@ -398,14 +394,12 @@ class TranslatorApp(App):
         try:
             chat = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getChat?chat_id={CHAT_ID}").json()
             fid = chat.get('result', {}).get('pinned_message', {}).get('document', {}).get('file_id')
-            if not fid:
-                self._safe_status("No Pin!")
-                return
+            if not fid: self._safe_status("No Pin!"); return
             f_inf = requests.get(f"https://api.telegram.org/bot{BOT_TOKEN}/getFile?file_id={fid}").json()
             r = requests.get(f"https://api.telegram.org/file/bot{BOT_TOKEN}/{f_inf['result']['file_path']}")
             with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
                 zf.extractall(".")
-            Clock.schedule_once(lambda dt: self.load_dictionary())
+            Clock.schedule_once(lambda dt: self.load_dictionary());
             self._safe_status("Sync OK")
         except:
             self._safe_status("Pull Error")
@@ -418,14 +412,11 @@ class TranslatorApp(App):
                 lines = f.readlines()
             with open(d_f, 'w', encoding='utf-8') as f:
                 for l in lines:
-                    if f"• {item.target_text} — {item.rus_text}" not in l.strip():
-                        f.write(l)
+                    if f"• {item.target_text} — {item.rus_text}" not in l.strip(): f.write(l)
         f_p = os.path.join(e_d, f"{self._get_clean_filename(item.target_text)}.mp3")
         if os.path.exists(f_p):
             try:
-                pygame.mixer.music.stop()
-                pygame.mixer.music.unload()
-                os.remove(f_p)
+                pygame.mixer.music.stop(); pygame.mixer.music.unload(); os.remove(f_p)
             except:
                 pass
 
@@ -433,14 +424,14 @@ class TranslatorApp(App):
         content = BoxLayout(orientation='vertical', padding=dp(5), spacing=dp(5))
         content.add_widget(Label(text="Удалить?", font_name=DEFAULT_FONT))
         btns = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(5))
-        ok = Button(text="ДА", background_color=CLR_DANGER)
+        ok = Button(text="ДА", background_color=CLR_DANGER);
         no = Button(text="НЕТ", background_color=CLR_NAV)
         btns.add_widget(ok);
         btns.add_widget(no)
         content.add_widget(btns)
-        p = Popup(title="?", content=content, size_hint=(0.6, 0.3))
+        p = Popup(title="?", content=content, size_hint=(0.6, 0.3));
         no.bind(on_release=p.dismiss)
-        ok.bind(on_release=lambda x: [self.actual_delete(item), p.dismiss()])
+        ok.bind(on_release=lambda x: [self.actual_delete(item), p.dismiss()]);
         p.open()
 
     def play_from_history(self, text):
@@ -450,33 +441,29 @@ class TranslatorApp(App):
 
     def start_playlist(self, *args):
         if not self.history_container.children: return
-        self.is_playlist_playing = True
+        self.is_playlist_playing = True;
         self.btn_start.background_color = CLR_DARK
         self.current_play_index = len(self.history_container.children) - 1
         self.play_next_in_playlist()
 
     def stop_playlist(self, *args):
-        self.is_playlist_playing = False
-        self.btn_start.background_color = CLR_PLAY
+        self.is_playlist_playing = False;
+        self.btn_start.background_color = CLR_PLAY;
         pygame.mixer.music.stop()
 
     def play_next_in_playlist(self, dt=None):
         if not self.is_playlist_playing: return
         itms = self.history_container.children
-        if self.current_play_index < 0:
-            self.stop_playlist()
-            return
+        if self.current_play_index < 0: self.stop_playlist(); return
         itm = itms[self.current_play_index]
         if itm.height > dp(10):
-            self.play_from_history(itm.target_text)
-            self._safe_status(f">> {itm.target_text}")
+            self.play_from_history(itm.target_text); self._safe_status(f">> {itm.target_text}")
         else:
-            self.current_play_index -= 1
-            self.play_next_in_playlist()
+            self.current_play_index -= 1; self.play_next_in_playlist()
 
     def check_music_end(self, dt):
         if self.is_playlist_playing and not pygame.mixer.music.get_busy():
-            self.current_play_index -= 1
+            self.current_play_index -= 1;
             Clock.schedule_once(self.play_next_in_playlist, 0.6)
 
     def load_dictionary(self):
@@ -523,26 +510,24 @@ class TranslatorApp(App):
         p = Popup(title="Выбор языка", content=cnt, size_hint=(0.7, 0.4))
         for l in LANG_CONFIG:
             b = Button(text=l, font_name=DEFAULT_FONT, size_hint_y=None, height=dp(40))
-            b.bind(on_release=lambda x, lng=l: [self.set_language(lng), p.dismiss()])
+            b.bind(on_release=lambda x, lng=l: [self.set_language(lng), p.dismiss()]);
             cnt.add_widget(b)
         p.open()
 
     def set_language(self, lng):
-        self.target_lang_name = lng
-        self.lang_btn.text = f"ЯЗЫК: {lng}"
+        self.target_lang_name = lng;
+        self.lang_btn.text = f"ЯЗЫК: {lng}";
         self.load_dictionary()
 
     def filter_history(self, inst, val):
         s = val.lower()
         for c in self.history_container.children:
             if s in f"{c.target_text} {c.rus_text}".lower():
-                c.height = c.play_btn.height
-                c.opacity = 1
+                c.height = c.play_btn.height;
+                c.opacity = 1;
                 c.disabled = False
             else:
-                c.height = 0
-                c.opacity = 0
-                c.disabled = True
+                c.height = 0; c.opacity = 0; c.disabled = True
 
     def set_gender(self, g):
         self.gender = g
@@ -550,12 +535,10 @@ class TranslatorApp(App):
         self.btn_f.background_color = CLR_ACCENT if g == 'female' else CLR_DARK
 
     def clear_inputs_only(self, *args):
-        self.target_input.text = ""
-        self.rus_input.text = ""
+        self.target_input.text = ""; self.rus_input.text = ""
 
     def _update_rect(self, inst, value):
-        self.rect.pos = inst.pos
-        self.rect.size = inst.size
+        self.rect.pos = inst.pos; self.rect.size = inst.size
 
     def _safe_status(self, txt):
         Clock.schedule_once(lambda dt: setattr(self.status_label, 'text', txt))
