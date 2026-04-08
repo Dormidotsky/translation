@@ -44,8 +44,8 @@ CLR_PUSH = get_color_from_hex('#8e44ad')
 CLR_PULL = get_color_from_hex('#2980b9')
 CLR_UPDATE = get_color_from_hex('#f39c12')
 
-# Ваша ссылка на GitHub Raw
-UPDATE_URL = "https://raw.githubusercontent.com/Dormidotsky/translation/refs/heads/main/translator_kivy.py"
+# САМАЯ НАДЕЖНАЯ ССЫЛКА (RAW)
+UPDATE_URL = "https://raw.githubusercontent.com/Dormidotsky/translation/main/translator_kivy.py"
 
 BOT_TOKEN = "8428105397:AAHGwEIEYqnhUP94vmReTso1Zdf00eLR5HY"
 CHAT_ID = "5741118439"
@@ -234,25 +234,25 @@ class TranslatorApp(App):
         Clock.schedule_interval(self.check_music_end, 0.8)
         return main_layout
 
-    # --- ЛОГИКА ОБНОВЛЕНИЯ (GITHUB) ---
+    # --- ЛОГИКА ОБНОВЛЕНИЯ (УСИЛЕННАЯ) ---
     def start_update(self, *args):
         self._safe_status("Поиск обновлений...")
         threading.Thread(target=self._run_update, daemon=True).start()
 
     def _run_update(self):
         try:
-            # Используем заголовок браузера, чтобы избежать блокировок
-            headers = {'User-Agent': 'Mozilla/5.0'}
+            headers = {'User-Agent': 'Mozilla/5.0', 'Cache-Control': 'no-cache'}
             resp = requests.get(UPDATE_URL, headers=headers, timeout=15)
 
             if resp.status_code == 200:
                 content = resp.content
-                # Проверка: если в начале HTML теги, значит ссылка ведет не на Raw файл
-                if b"<html" in content.lower() or b"<!doctype" in content.lower():
-                    self._safe_status("Ошибка: Получен HTML код")
+                # Проверка: если в начале HTML теги — это ошибка ссылки
+                if b"<!DOCTYPE html>" in content or b"<html" in content:
+                    self._safe_status("Ошибка: Ссылка ведет на HTML")
                     return
 
-                if len(content) < 5000:
+                # Проверка на адекватный размер кода
+                if len(content) < 10000:
                     self._safe_status(f"Слишком мал: {len(content)} б")
                     return
 
@@ -266,31 +266,28 @@ class TranslatorApp(App):
                 Clock.schedule_once(lambda dt: self._apply_update(curr_file, new_file))
             else:
                 self._safe_status(f"Ошибка сервера: {resp.status_code}")
-        except Exception:
-            self._safe_status("Ошибка сети")
+        except Exception as e:
+            self._safe_status(f"Ошибка сети: {str(e)[:15]}")
 
     def _apply_update(self, old, new):
         try:
-            # Для Windows создаем скрипт-посредник для замены файла
             if os.name == 'nt':
-                bat_path = "update_script.bat"
-                with open(bat_path, "w", encoding='cp866') as f:
-                    f.write(f'@echo off\n')
-                    f.write(f'timeout /t 2 /nobreak > nul\n')
+                bat_path = "updater.bat"
+                with open(bat_path, "w", encoding='utf-8') as f:
+                    f.write(f'@echo off\nchcp 65001 > nul\n')
+                    f.write(f'timeout /t 1 /nobreak > nul\n')
                     f.write(f'move /y "{new}" "{old}"\n')
                     f.write(f'start "" python "{old}"\n')
                     f.write(f'del "%~f0"\n')
                 os.startfile(bat_path)
             else:
-                # Для Linux/Android/MacOS
                 os.replace(new, old)
                 subprocess.Popen([sys.executable, old])
-
             App.get_running_app().stop()
-        except Exception as e:
+        except:
             self._safe_status("Замените файл вручную")
 
-    # --- ОСТАЛЬНАЯ ЛОГИКА ---
+    # --- ВСЕ ОСТАЛЬНЫЕ ФУНКЦИИ ---
     def scroll_up(self, *args):
         if self.history_container.height > self.scroll_view.height:
             step = dp(85) / self.history_container.height
