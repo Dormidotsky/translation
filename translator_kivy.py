@@ -1,5 +1,4 @@
 # pylint:disable=C0114
-#файл обновлен
 import asyncio
 import threading
 import os
@@ -219,7 +218,7 @@ class TranslatorApp(App):
         Clock.schedule_interval(self.check_music_end, 0.8)
         return main_layout
 
-    # --- УМНЫЙ UPDATER (БЕЗ ЗАКРЫТИЯ ПРИЛОЖЕНИЯ) ---
+    # --- УНИВЕРСАЛЬНЫЙ UPDATER (WIN + ANDROID) ---
     def start_update(self, *args):
         self._safe_status("Поиск обновлений...");
         threading.Thread(target=self._run_update, daemon=True).start()
@@ -242,10 +241,10 @@ class TranslatorApp(App):
 
     def _show_update_popup(self, old, new):
         content = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
-        content.add_widget(Label(text="Скачано!\nЗамена произойдет\nпосле закрытия программы.", halign='center',
-                                 font_name=DEFAULT_FONT))
+        msg = "Скачано! Оно применится\nпосле перезапуска." if os.name == 'nt' else "Скачано! Перезапустите\nприложение вручную."
+        content.add_widget(Label(text=msg, halign='center', font_name=DEFAULT_FONT))
         btn = Button(text="OK", size_hint_y=None, height=dp(50), background_color=CLR_PLAY)
-        popup = Popup(title="Уведомление", content=content, size_hint=(0.8, 0.4))
+        popup = Popup(title="Обновление", content=content, size_hint=(0.8, 0.4))
         btn.bind(on_release=lambda x: [self._prepare_silent_update(old, new), popup.dismiss()])
         content.add_widget(btn);
         popup.open()
@@ -259,9 +258,11 @@ class TranslatorApp(App):
             subprocess.Popen([bat], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
         else:
             try:
-                os.replace(new, old)
-            except:
-                pass
+                # В Android/Linux заменяем файл сразу (эффект будет после перезапуска)
+                if os.path.exists(new):
+                    os.replace(new, old)
+            except Exception as e:
+                self._safe_status(f"Ошибка прав: {str(e)}")
 
     # --- ЛОГИКА ---
     def _init_audio(self):
