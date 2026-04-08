@@ -1,6 +1,4 @@
 # pylint:disable=C0114
-#приложение обновлено
-#обновлено еще раз
 import asyncio
 import threading
 import os
@@ -220,41 +218,49 @@ class TranslatorApp(App):
         Clock.schedule_interval(self.check_music_end, 0.8)
         return main_layout
 
-    # --- UPDATER ---
+    # --- УМНЫЙ UPDATER (БЕЗ ЗАКРЫТИЯ ПРИЛОЖЕНИЯ) ---
     def start_update(self, *args):
-        self._safe_status("Обновление...");
+        self._safe_status("Поиск обновлений...");
         threading.Thread(target=self._run_update, daemon=True).start()
 
     def _run_update(self):
         try:
-            url = f"{UPDATE_URL_BASE}?v={random.randint(1, 9999)}"
-            resp = requests.get(url, timeout=10)
+            url = f"{UPDATE_URL_BASE}?v={random.randint(1, 99999)}"
+            resp = requests.get(url, timeout=15)
             if resp.status_code == 200 and "TranslatorApp" in resp.text:
                 curr_file = os.path.abspath(sys.argv[0])
                 new_file = curr_file + ".new"
                 with open(new_file, 'wb') as f:
                     f.write(resp.content)
-                Clock.schedule_once(lambda dt: self._apply_update(curr_file, new_file))
+                self._safe_status("Обновление готово!")
+                Clock.schedule_once(lambda dt: self._show_update_popup(curr_file, new_file))
             else:
-                self._safe_status("Нет обновлений")
+                self._safe_status("Версия актуальна")
         except:
             self._safe_status("Ошибка сети")
 
-    def _apply_update(self, old, new):
-        try:
-            if os.name == 'nt':
-                bat = "upd.bat"
-                with open(bat, "w", encoding='utf-8') as f:
-                    # Используем start "" "%PYTHON_EXE%" для надежности
-                    f.write(
-                        f'@echo off\ntimeout /t 1 /nobreak > nul\nmove /y "{new}" "{old}"\nstart "" "{sys.executable.replace("python.exe", "pythonw.exe")}" "{old}"\ndel "%~f0"')
-                subprocess.Popen([bat], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
-            else:
-                os.replace(new, old);
-                subprocess.Popen([sys.executable, old])
-            sys.exit()
-        except:
-            sys.exit()
+    def _show_update_popup(self, old, new):
+        content = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
+        content.add_widget(Label(text="Скачано!\nЗамена произойдет\nпосле закрытия программы.", halign='center',
+                                 font_name=DEFAULT_FONT))
+        btn = Button(text="OK", size_hint_y=None, height=dp(50), background_color=CLR_PLAY)
+        popup = Popup(title="Уведомление", content=content, size_hint=(0.8, 0.4))
+        btn.bind(on_release=lambda x: [self._prepare_silent_update(old, new), popup.dismiss()])
+        content.add_widget(btn);
+        popup.open()
+
+    def _prepare_silent_update(self, old, new):
+        if os.name == 'nt':
+            bat = "silent_upd.bat"
+            with open(bat, "w", encoding='utf-8') as f:
+                f.write(
+                    f'@echo off\n:loop\ntasklist | find /i "{os.path.basename(sys.executable)}" >nul\nif not errorlevel 1 (\n  timeout /t 3 >nul\n  goto loop\n)\nmove /y "{new}" "{old}"\ndel "%~f0"')
+            subprocess.Popen([bat], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
+        else:
+            try:
+                os.replace(new, old)
+            except:
+                pass
 
     # --- ЛОГИКА ---
     def _init_audio(self):
@@ -312,7 +318,7 @@ class TranslatorApp(App):
         if t and r: self.is_saving = True; threading.Thread(target=self._run_save, args=(t, r), daemon=True).start()
 
     def _run_save(self, t, r):
-        _, e_d = self.get_paths();
+        _, e_d = self.get_paths()
         if not os.path.exists(e_d): os.makedirs(e_d)
         p = os.path.join(e_d, f"{self._get_clean_filename(t)}.mp3");
         rate = f"{int(self.speed_slider.value):+d}%"
@@ -336,10 +342,9 @@ class TranslatorApp(App):
 
     def _fin_save(self, t, r):
         d_f, _ = self.get_paths()
-        with open(d_f, 'a', encoding='utf-8') as f:
-            f.write(f"• {t} — {r}\n")
-        self.load_dictionary()
-        self.clear_inputs_only()
+        with open(d_f, 'a', encoding='utf-8') as f: f.write(f"• {t} — {r}\n")
+        self.load_dictionary();
+        self.clear_inputs_only();
         self._safe_status("Готово")
 
     def cloud_push(self, *args):
@@ -392,9 +397,9 @@ class TranslatorApp(App):
 
     def play_next_in_playlist(self, dt=None):
         if not self.is_playlist_playing: return
-        itms = self.history_container.children;
+        itms = self.history_container.children
         if self.current_play_index < 0: self.stop_playlist(); return
-        itm = itms[self.current_play_index];
+        itm = itms[self.current_play_index]
         if itm.height > dp(10):
             self.play_from_history(itm.target_text)
         else:
@@ -478,9 +483,6 @@ class TranslatorApp(App):
 
     def clear_inputs_only(self, *args):
         self.target_input.text = ""; self.rus_input.text = ""
-
-    def _update_rect(self, inst, value):
-        self.rect.pos = inst.pos; self.rect.size = inst.size
 
     def _safe_status(self, txt):
         Clock.schedule_once(lambda dt: setattr(self.status_label, 'text', txt))
