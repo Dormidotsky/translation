@@ -8,15 +8,14 @@ import edge_tts
 import zipfile
 import requests
 import io
-import syshttps://github.com/Dormidotsky/translation/pulse
+import sys
 import subprocess
 import random
 from deep_translator import GoogleTranslator
 
 from kivy.config import Config
-# Отключаем мультитач и настраиваем скрытие консоли (на сколько это возможно средствами Kivy)
 Config.set('input', 'mouse', 'mouse,disable_multitouch')
-Config.set('kivy', 'log_level', 'error') # Меньше мусора в консоль
+Config.set('kivy', 'log_level', 'error') 
 
 from kivy.app import App
 from kivy.uix.boxlayout import BoxLayout
@@ -175,7 +174,7 @@ class TranslatorApp(App):
         self.load_dictionary(); Clock.schedule_interval(self.check_music_end, 0.8)
         return main_layout
 
-    # --- ЧИСТЫЙ UPDATER ---
+    # --- UPDATER ---
     def start_update(self, *args):
         self._safe_status("Обновление..."); threading.Thread(target=self._run_update, daemon=True).start()
 
@@ -188,20 +187,20 @@ class TranslatorApp(App):
                 new_file = curr_file + ".new"
                 with open(new_file, 'wb') as f: f.write(resp.content)
                 Clock.schedule_once(lambda dt: self._apply_update(curr_file, new_file))
-            else: self._safe_status("Ошибка сервера")
+            else: self._safe_status("Нет обновлений")
         except: self._safe_status("Ошибка сети")
 
     def _apply_update(self, old, new):
         try:
             if os.name == 'nt':
                 bat = "upd.bat"
-                # Скрипт: ждет 1 сек, меняет файл, запускает python БЕЗ консоли (pythonw), удаляется
                 with open(bat, "w", encoding='utf-8') as f:
-                    f.write(f'@echo off\ntimeout /t 1 /nobreak > nul\nmove /y "{new}" "{old}"\nstart "" pythonw "{old}"\nexit')
+                    # Используем start "" "%PYTHON_EXE%" для надежности
+                    f.write(f'@echo off\ntimeout /t 1 /nobreak > nul\nmove /y "{new}" "{old}"\nstart "" "{sys.executable.replace("python.exe", "pythonw.exe")}" "{old}"\ndel "%~f0"')
                 subprocess.Popen([bat], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
             else:
                 os.replace(new, old); subprocess.Popen([sys.executable, old])
-            sys.exit() # Закрываем текущее приложение немедленно
+            sys.exit()
         except: sys.exit()
 
     # --- ЛОГИКА ---
