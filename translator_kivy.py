@@ -271,8 +271,12 @@ class TranslatorApp(App):
         except: return False
 
     def _fin_save(self, t, r):
-        d_f, _ = self.get_paths(); with open(d_f, 'a', encoding='utf-8') as f: f.write(f"• {t} — {r}\n")
-        self.load_dictionary(); self.clear_inputs_only(); self._safe_status("Готово")
+        d_f, _ = self.get_paths()
+        with open(d_f, 'a', encoding='utf-8') as f: 
+            f.write(f"• {t} — {r}\n")
+        self.load_dictionary()
+        self.clear_inputs_only()
+        self._safe_status("Готово")
 
     def cloud_push(self, *args): threading.Thread(target=self._run_push, daemon=True).start()
     def _run_push(self):
