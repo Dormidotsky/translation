@@ -1,4 +1,5 @@
 # pylint:disable=C0114
+# полное резервирование
 import asyncio
 import threading
 import os
