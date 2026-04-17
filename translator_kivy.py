@@ -1,4 +1,5 @@
 # pylint:disable=C0114
+# финал с комментариями
 import asyncio
 import threading
 import os
