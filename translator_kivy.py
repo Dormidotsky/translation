@@ -1,5 +1,4 @@
 # pylint:disable=C0114
-# полное резервирование
 import asyncio
 import threading
 import os
@@ -16,6 +15,7 @@ from deep_translator import GoogleTranslator
 
 from kivy.config import Config
 
+# Отключаем мультитач, чтобы избежать фантомных нажатий, и ограничиваем логи
 Config.set('input', 'mouse', 'mouse,disable_multitouch')
 Config.set('kivy', 'log_level', 'error')
 
@@ -35,34 +35,37 @@ from kivy.core.text import LabelBase
 from kivy.metrics import dp
 from kivy.graphics import Color, Rectangle
 
-# --- КОНСТАНТЫ ---
+# --- ЦВЕТОВАЯ ПАЛИТРА И НАСТРОЙКИ ---
 FONT_PATH = 'sylfaen.ttf'
-CLR_MAIN = get_color_from_hex('#3498db')
-CLR_ACCENT = get_color_from_hex('#e91e63')
-CLR_DARK = get_color_from_hex('#2c3e50')
-CLR_DANGER = get_color_from_hex('#e74c3c')
-CLR_NAV = get_color_from_hex('#95a5a6')
-CLR_PLAY = get_color_from_hex('#2ecc71')
-CLR_PUSH = get_color_from_hex('#8e44ad')
-CLR_PULL = get_color_from_hex('#2980b9')
-CLR_UPDATE = get_color_from_hex('#f39c12')
+CLR_MAIN = get_color_from_hex('#3498db')  # Синий
+CLR_ACCENT = get_color_from_hex('#e91e63')  # Розовый
+CLR_DARK = get_color_from_hex('#2c3e50')  # Темный
+CLR_DANGER = get_color_from_hex('#e74c3c')  # Красный
+CLR_NAV = get_color_from_hex('#95a5a6')  # Серый
+CLR_PLAY = get_color_from_hex('#2ecc71')  # Зеленый
+CLR_PUSH = get_color_from_hex('#8e44ad')  # Фиолетовый
+CLR_PULL = get_color_from_hex('#2980b9')  # Темно-синий
+CLR_UPDATE = get_color_from_hex('#f39c12')  # Оранжевый
 
 UPDATE_URL_BASE = "https://raw.githubusercontent.com/Dormidotsky/translation/main/translator_kivy.py"
 BOT_TOKEN = "8428105397:AAHGwEIEYqnhUP94vmReTso1Zdf00eLR5HY"
 CHAT_ID = "5741118439"
 
+# Регистрация шрифта (поддержка грузинского языка)
 if os.path.exists(FONT_PATH):
     LabelBase.register(name='CustomFont', fn_regular=FONT_PATH)
     DEFAULT_FONT = 'CustomFont'
 else:
     DEFAULT_FONT = 'Roboto'
 
+# Конфигурация поддерживаемых языков
 LANG_CONFIG = {
     "Грузинский": {"code": "ka", "voice": "ka"},
     "English": {"code": "en", "voice": "en"},
     "Türkçe": {"code": "tr", "voice": "tr"}
 }
 
+# Голоса для озвучки (Edge TTS)
 VOICES = {
     "ka": {"male": "ka-GE-GiorgiNeural", "female": "ka-GE-EkaNeural"},
     "ru": {"male": "ru-RU-DmitryNeural", "female": "ru-RU-SvetlanaNeural"},
@@ -72,6 +75,8 @@ VOICES = {
 
 
 class DictionaryItem(BoxLayout):
+    """Класс одного элемента в списке истории (строка с переводом и кнопка удаления)"""
+
     def __init__(self, target_text, rus_text, play_func, delete_func, **kwargs):
         super().__init__(**kwargs)
         self.orientation = 'horizontal'
@@ -82,6 +87,7 @@ class DictionaryItem(BoxLayout):
         self.target_text = target_text
         self.rus_text = rus_text
 
+        # Кнопка воспроизведения (весь текст элемента)
         self.play_btn = Button(
             text=f"{target_text}\n— {rus_text}",
             font_name=DEFAULT_FONT, font_size='18sp',
@@ -94,15 +100,18 @@ class DictionaryItem(BoxLayout):
         self.play_btn.bind(texture_size=self._update_height)
         self.play_btn.bind(on_release=lambda x: play_func(self.target_text))
 
+        # Кнопка удаления (X)
         self.del_btn = Button(
             text="X", size_hint=(None, 1), width=dp(55),
             background_normal='', background_color=CLR_DANGER, bold=True, font_size='20sp'
         )
         self.del_btn.bind(on_release=lambda x: delete_func(self))
+
         self.add_widget(self.play_btn)
         self.add_widget(self.del_btn)
 
     def _update_height(self, instance, size):
+        """Динамическая подстройка высоты под длинный текст"""
         new_height = max(dp(80), size[1] + dp(25))
         self.height = new_height
         self.play_btn.height = new_height
@@ -110,28 +119,33 @@ class DictionaryItem(BoxLayout):
 
 class TranslatorApp(App):
     def build(self):
+        # Состояние приложения
         self.gender = 'male'
         self.is_saving = False
         self.is_pushing = False
         self.is_playlist_playing = False
         self.current_play_index = -1
         self.target_lang_name = "Грузинский"
-        self.live_files = ['live_1.mp3', 'live_2.mp3']
+        self.live_files = ['live_1.mp3', 'live_2.mp3']  # Буфер для предпрослушивания
         self.current_live_idx = 0
         self._init_audio()
 
+        # --- ИНТЕРФЕЙС ---
         main_layout = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(5))
-        top_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(220), spacing=dp(5))
-        header_row = BoxLayout(size_hint_y=None, height=dp(45), spacing=dp(5))
 
-        self.lang_btn = Button(text=f"ЯЗЫК: {self.target_lang_name}", size_hint_x=0.85, background_color=CLR_NAV,
-                               font_name=DEFAULT_FONT, bold=True)
+        # Верхний блок ввода
+        top_box = BoxLayout(orientation='vertical', size_hint_y=None, height=dp(220), spacing=dp(5))
+
+        header_row = BoxLayout(size_hint_y=None, height=dp(45), spacing=dp(5))
+        self.lang_btn = Button(text=f"ЯЗЫК: {self.target_lang_name}", size_hint_x=0.85,
+                               background_color=CLR_NAV, font_name=DEFAULT_FONT, bold=True)
         self.lang_btn.bind(on_release=self.open_lang_menu)
         self.update_btn = Button(text="UPD", size_hint_x=0.15, background_color=CLR_UPDATE, bold=True)
         self.update_btn.bind(on_release=self.start_update)
 
         header_row.add_widget(self.lang_btn)
         header_row.add_widget(self.update_btn)
+
         self.target_input = TextInput(hint_text="Текст...", font_name=DEFAULT_FONT, font_size='18sp', multiline=False)
         self.rus_input = TextInput(hint_text="Русский...", font_name=DEFAULT_FONT, font_size='18sp', multiline=False)
         self.search_input = TextInput(hint_text="Поиск...", font_name=DEFAULT_FONT, font_size='16sp', multiline=False)
@@ -143,15 +157,18 @@ class TranslatorApp(App):
         top_box.add_widget(self.search_input)
         main_layout.add_widget(top_box)
 
+        # Кнопки управления (Плейлист, Облако, Пол, Скорость)
         controls_row = BoxLayout(size_hint_y=None, height=dp(50), spacing=dp(3))
         self.btn_start = Button(text="ALL", background_color=CLR_PLAY, bold=True, size_hint_x=0.12)
         self.btn_start.bind(on_release=self.start_playlist)
         self.btn_stop = Button(text="OFF", background_color=CLR_DANGER, bold=True, size_hint_x=0.12)
         self.btn_stop.bind(on_release=self.stop_playlist)
+
         btn_push = Button(text="PUSH", background_color=CLR_PUSH, bold=True, size_hint_x=0.13)
         btn_push.bind(on_release=self.cloud_push)
         btn_pull = Button(text="PULL", background_color=CLR_PULL, bold=True, size_hint_x=0.13)
         btn_pull.bind(on_release=self.cloud_pull)
+
         gender_box = BoxLayout(spacing=dp(2), size_hint_x=0.22)
         self.btn_m = ToggleButton(text='М', group='g', state='down', background_color=CLR_MAIN)
         self.btn_m.bind(on_press=lambda x: self.set_gender('male'))
@@ -159,7 +176,9 @@ class TranslatorApp(App):
         self.btn_f.bind(on_press=lambda x: self.set_gender('female'))
         gender_box.add_widget(self.btn_m)
         gender_box.add_widget(self.btn_f)
+
         self.speed_slider = Slider(min=-50, max=50, value=0, size_hint_x=0.28)
+
         controls_row.add_widget(self.btn_start)
         controls_row.add_widget(self.btn_stop)
         controls_row.add_widget(btn_push)
@@ -168,14 +187,17 @@ class TranslatorApp(App):
         controls_row.add_widget(self.speed_slider)
         main_layout.add_widget(controls_row)
 
+        # Список истории со скроллом и навигацией
         list_area = BoxLayout(orientation='horizontal', spacing=dp(5))
         nav_panel = BoxLayout(orientation='vertical', size_hint_x=None, width=dp(45), spacing=dp(2))
+
         btn_up = Button(text="^", background_color=CLR_NAV)
         btn_up.bind(on_press=self.scroll_up)
         self.scroll_slider = Slider(orientation='vertical', min=0, max=1, value=1)
         self.scroll_slider.bind(value=self.on_slider_scroll)
         btn_down = Button(text="v", background_color=CLR_NAV)
         btn_down.bind(on_press=self.scroll_down)
+
         nav_panel.add_widget(btn_up)
         nav_panel.add_widget(self.scroll_slider)
         nav_panel.add_widget(btn_down)
@@ -185,10 +207,12 @@ class TranslatorApp(App):
         self.scroll_view = ScrollView(do_scroll_x=False, do_scroll_y=True)
         self.scroll_view.bind(scroll_y=self.on_view_scroll)
         self.scroll_view.add_widget(self.history_container)
+
         list_area.add_widget(nav_panel)
         list_area.add_widget(self.scroll_view)
         main_layout.add_widget(list_area)
 
+        # Статус-бар
         self.status_container = BoxLayout(size_hint_y=None, height=dp(30))
         with self.status_container.canvas.before:
             Color(0.1, 0.1, 0.1, 1)
@@ -197,9 +221,10 @@ class TranslatorApp(App):
         self.status_container.add_widget(self.status_label)
         main_layout.add_widget(self.status_container)
 
+        # Основные действия (Нижние кнопки)
         action_btns = BoxLayout(size_hint_y=None, height=dp(90), orientation='vertical', spacing=dp(4))
-        r1 = BoxLayout(spacing=dp(5))
-        r2 = BoxLayout(spacing=dp(5))
+        r1, r2 = BoxLayout(spacing=dp(5)), BoxLayout(spacing=dp(5))
+
         btn_t = Button(text="ПЕРЕВОД", background_color=CLR_MAIN, font_name=DEFAULT_FONT)
         btn_t.bind(on_release=self.do_translate)
         btn_l = Button(text="СЛУШАТЬ", background_color=get_color_from_hex('#9b59b6'), font_name=DEFAULT_FONT)
@@ -208,37 +233,43 @@ class TranslatorApp(App):
         btn_s.bind(on_release=self.save_and_add)
         btn_c = Button(text="ОЧИСТИТЬ", background_color=get_color_from_hex('#7f8c8d'), font_name=DEFAULT_FONT)
         btn_c.bind(on_release=self.clear_inputs_only)
-        r1.add_widget(btn_t)
+
+        r1.add_widget(btn_t);
         r1.add_widget(btn_l)
-        r2.add_widget(btn_s)
+        r2.add_widget(btn_s);
         r2.add_widget(btn_c)
-        action_btns.add_widget(r1)
+        action_btns.add_widget(r1);
         action_btns.add_widget(r2)
         main_layout.add_widget(action_btns)
 
         self.load_dictionary()
-        Clock.schedule_interval(self.check_music_end, 0.8)
+        Clock.schedule_interval(self.check_music_end, 0.8)  # Проверка окончания трека для плейлиста
         return main_layout
 
-    # --- СКРОЛЛ ---
+    # --- НАВИГАЦИЯ И СКРОЛЛ ---
     def scroll_up(self, *args):
+        """Прокрутка вверх на один элемент"""
         if self.history_container.height > self.scroll_view.height:
             step = dp(85) / (self.history_container.height - self.scroll_view.height)
             self.scroll_view.scroll_y = min(1, self.scroll_view.scroll_y + step)
 
     def scroll_down(self, *args):
+        """Прокрутка вниз на один элемент"""
         if self.history_container.height > self.scroll_view.height:
             step = dp(85) / (self.history_container.height - self.scroll_view.height)
             self.scroll_view.scroll_y = max(0, self.scroll_view.scroll_y - step)
 
     def on_slider_scroll(self, inst, val):
+        """Синхронизация слайдера со скроллом"""
         if abs(self.scroll_view.scroll_y - val) > 0.01: self.scroll_view.scroll_y = val
 
     def on_view_scroll(self, inst, val):
+        """Синхронизация скролла со слайдером"""
         if abs(self.scroll_slider.value - val) > 0.01: self.scroll_slider.value = val
 
-    # --- РЕЗЕРВНОЕ КОПИРОВАНИЕ (ВСЕ ЯЗЫКИ) ---
+    # --- ОБЛАЧНЫЙ БЭКАП (ВСЕ ЯЗЫКИ) ---
     def cloud_push(self, *args):
+        """Запуск процесса отправки всех данных в Telegram"""
         if self.is_pushing: return
         self.is_pushing = True
         threading.Thread(target=self._run_push, daemon=True).start()
@@ -248,35 +279,33 @@ class TranslatorApp(App):
         zip_buf = io.BytesIO()
         try:
             with zipfile.ZipFile(zip_buf, 'w', zipfile.ZIP_DEFLATED) as zf:
-                # Пакуем ВСЕ словари и ВСЕ папки экспорта
                 for item in os.listdir('.'):
+                    # Добавляем все текстовые словари
                     if item.startswith('dictionary_') and item.endswith('.txt'):
                         zf.write(item)
+                    # Добавляем все папки с озвучкой
                     if item.startswith('exports_') and os.path.isdir(item):
                         for r, _, fs in os.walk(item):
-                            for f in fs:
-                                zf.write(os.path.join(r, f))
-
+                            for f in fs: zf.write(os.path.join(r, f))
             zip_buf.seek(0)
-            resp = requests.post(
-                f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
-                files={'document': ("universal_backup.zip", zip_buf)},
-                data={'chat_id': CHAT_ID},
-                timeout=60
-            )
+            resp = requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/sendDocument",
+                                 files={'document': ("universal_backup.zip", zip_buf)},
+                                 data={'chat_id': CHAT_ID}, timeout=60)
             if resp.status_code == 200:
+                # Закрепляем сообщение для последующего PULL
                 msg_id = resp.json().get('result', {}).get('message_id')
                 requests.post(f"https://api.telegram.org/bot{BOT_TOKEN}/pinChatMessage",
                               data={'chat_id': CHAT_ID, 'message_id': msg_id}, timeout=10)
-                self._safe_status("Полный бэкап OK")
+                self._safe_status("Бэкап всех языков OK")
             else:
                 self._safe_status(f"Ошибка: {resp.status_code}")
         except Exception as e:
-            self._safe_status(f"Ошибка бэкапа: {str(e)[:15]}")
+            self._safe_status(f"Ошибка: {str(e)[:15]}")
         finally:
             self.is_pushing = False
 
     def cloud_pull(self, *args):
+        """Запуск восстановления данных из закрепленного сообщения"""
         threading.Thread(target=self._run_pull, daemon=True).start()
 
     def _run_pull(self):
@@ -292,11 +321,11 @@ class TranslatorApp(App):
             with zipfile.ZipFile(io.BytesIO(r.content)) as zf:
                 zf.extractall(".")
             Clock.schedule_once(lambda dt: self.load_dictionary())
-            self._safe_status("Данные восстановлены!")
+            self._safe_status("Все данные восстановлены!")
         except:
             self._safe_status("Ошибка Pull")
 
-    # --- UPDATER ---
+    # --- ОБНОВЛЕНИЕ ПРИЛОЖЕНИЯ ---
     def start_update(self, *args):
         self._safe_status("Поиск...")
         threading.Thread(target=self._run_update, daemon=True).start()
@@ -319,8 +348,8 @@ class TranslatorApp(App):
 
     def _show_update_popup(self, old, new):
         content = BoxLayout(orientation='vertical', padding=dp(10), spacing=dp(10))
-        msg = "Обновление скачано!\nОно применится после перезапуска."
-        content.add_widget(Label(text=msg, halign='center', font_name=DEFAULT_FONT, font_size='14sp'))
+        content.add_widget(Label(text="Обновление скачано!\nОно применится после перезапуска.", halign='center',
+                                 font_name=DEFAULT_FONT))
         btn = Button(text="ОК", size_hint_y=None, height=dp(50), background_color=CLR_PLAY)
         popup = Popup(title="Обновление", content=content, size_hint=(0.8, 0.4))
         btn.bind(on_release=lambda x: [self._prepare_silent_update(old, new), popup.dismiss()])
@@ -328,13 +357,14 @@ class TranslatorApp(App):
         popup.open()
 
     def _prepare_silent_update(self, old, new):
-        if os.name == 'nt':
+        """Метод замены старого файла новым в зависимости от ОС"""
+        if os.name == 'nt':  # Для Windows через .bat
             bat = "silent_upd.bat"
             with open(bat, "w", encoding='utf-8') as f:
                 f.write(
                     f'@echo off\n:loop\ntasklist | find /i "{os.path.basename(sys.executable)}" >nul\nif not errorlevel 1 (\n  timeout /t 3 >nul\n  goto loop\n)\nmove /y "{new}" "{old}"\ndel "%~f0"')
             subprocess.Popen([bat], shell=True, creationflags=subprocess.CREATE_NO_WINDOW)
-        else:
+        else:  # Для Android/Unix (создание новой копии)
             try:
                 base_name, ext, folder = "translator_kivy", ".py", os.path.dirname(old)
                 counter = 1
@@ -348,7 +378,7 @@ class TranslatorApp(App):
             except:
                 self._safe_status("Ошибка сохранения")
 
-    # --- ЛОГИКА АУДИО, ПЕРЕВОДА И ИНТЕРФЕЙСА ---
+    # --- ЛОГИКА АУДИО И ПЕРЕВОДА ---
     def _init_audio(self):
         try:
             pygame.mixer.init()
@@ -356,6 +386,7 @@ class TranslatorApp(App):
             pass
 
     def load_dictionary(self):
+        """Загрузка слов из файла текущего языка в UI"""
         self.history_container.clear_widgets()
         d_f, _ = self.get_paths()
         if os.path.exists(d_f):
@@ -367,6 +398,7 @@ class TranslatorApp(App):
                             DictionaryItem(t.strip(), r.strip(), self.play_from_history, self.confirm_delete))
 
     def do_translate(self, *args):
+        """Автоматическое определение направления перевода"""
         t, r = self.target_input.text.strip(), self.rus_input.text.strip()
         c = LANG_CONFIG[self.target_lang_name]["code"]
         if t:
@@ -388,6 +420,7 @@ class TranslatorApp(App):
             self.target_input.text = text
 
     def live_listen(self, *args):
+        """Предпрослушивание без сохранения в базу"""
         t, r = self.target_input.text.strip(), self.rus_input.text.strip()
         if not t and not r: return
         self.current_live_idx = 1 - self.current_live_idx
@@ -399,6 +432,7 @@ class TranslatorApp(App):
         if asyncio.run(self._gen_audio(t, r, rate, p)): Clock.schedule_once(lambda dt: self._play_audio(p))
 
     def save_and_add(self, *args):
+        """Озвучка и сохранение пары слов в файл и историю"""
         if self.is_saving: return
         t, r = self.target_input.text.strip(), self.rus_input.text.strip()
         if t and r:
@@ -406,15 +440,15 @@ class TranslatorApp(App):
             threading.Thread(target=self._run_save, args=(t, r), daemon=True).start()
 
     def _run_save(self, t, r):
-        _, e_d = self.get_paths()
-        if not os.path.exists(e_d): os.makedirs(e_d)
+        _, e_d = self.get_paths();
+        os.makedirs(e_d, exist_ok=True)
         p = os.path.join(e_d, f"{self._get_clean_filename(t)}.mp3")
         rate = f"{int(self.speed_slider.value):+d}%"
-        if asyncio.run(self._gen_audio(t, r, rate, p)):
-            Clock.schedule_once(lambda dt: self._fin_save(t, r))
+        if asyncio.run(self._gen_audio(t, r, rate, p)): Clock.schedule_once(lambda dt: self._fin_save(t, r))
         self.is_saving = False
 
     async def _gen_audio(self, t, r, rate, path):
+        """Генерация склеенного аудио (Оригинал + Русский)"""
         try:
             v_t = LANG_CONFIG[self.target_lang_name]["voice"]
             await edge_tts.Communicate(t, VOICES[v_t][self.gender], rate=rate).save("tmp_t.mp3")
@@ -432,41 +466,45 @@ class TranslatorApp(App):
     def _fin_save(self, t, r):
         d_f, _ = self.get_paths()
         with open(d_f, 'a', encoding='utf-8') as f: f.write(f"• {t} — {r}\n")
-        self.load_dictionary()
-        self.clear_inputs_only()
+        self.load_dictionary();
+        self.clear_inputs_only();
         self._safe_status("Готово")
 
+    # --- ПЛЕЙЛИСТ ---
     def start_playlist(self, *args):
+        """Запуск последовательного воспроизведения всей истории"""
         if not self.history_container.children: return
-        self.is_playlist_playing = True
+        self.is_playlist_playing = True;
         self.btn_start.background_color = CLR_DARK
         self.current_play_index = len(self.history_container.children) - 1
         self.play_next_in_playlist()
 
     def stop_playlist(self, *args):
-        self.is_playlist_playing = False
+        """Остановка плейлиста"""
+        self.is_playlist_playing = False;
         self.btn_start.background_color = CLR_PLAY
         pygame.mixer.music.stop()
 
     def play_next_in_playlist(self, dt=None):
         if not self.is_playlist_playing: return
         itms = self.history_container.children
-        if self.current_play_index < 0:
-            self.stop_playlist()
-            return
+        if self.current_play_index < 0: self.stop_playlist(); return
         itm = itms[self.current_play_index]
+        # Проигрываем только видимые (не отфильтрованные) элементы
         if itm.height > dp(10):
             self.play_from_history(itm.target_text)
         else:
-            self.current_play_index -= 1
-            self.play_next_in_playlist()
+            self.current_play_index -= 1; self.play_next_in_playlist()
 
     def check_music_end(self, dt):
+        """Таймер проверки: если трек доиграл, включаем следующий"""
         if self.is_playlist_playing and not pygame.mixer.music.get_busy():
-            self.current_play_index -= 1
+            self.current_play_index -= 1;
             Clock.schedule_once(self.play_next_in_playlist, 0.6)
 
+    # --- УДАЛЕНИЕ ---
     def actual_delete(self, item):
+        """Физическое удаление записи из файла и mp3 с диска"""
         self.history_container.remove_widget(item)
         d_f, e_d = self.get_paths()
         if os.path.exists(d_f):
@@ -478,47 +516,48 @@ class TranslatorApp(App):
         f_p = os.path.join(e_d, f"{self._get_clean_filename(item.target_text)}.mp3")
         if os.path.exists(f_p):
             try:
-                pygame.mixer.music.stop();
-                pygame.mixer.music.unload();
-                os.remove(f_p)
+                pygame.mixer.music.stop(); pygame.mixer.music.unload(); os.remove(f_p)
             except:
                 pass
 
     def confirm_delete(self, item):
+        """Попап подтверждения удаления"""
         content = BoxLayout(orientation='vertical', padding=dp(5), spacing=dp(5))
         content.add_widget(Label(text="Удалить?", font_name=DEFAULT_FONT))
         btns = BoxLayout(size_hint_y=None, height=dp(40), spacing=dp(5))
-        ok = Button(text="ДА", background_color=CLR_DANGER)
-        no = Button(text="НЕТ", background_color=CLR_NAV)
+        ok, no = Button(text="ДА", background_color=CLR_DANGER), Button(text="НЕТ", background_color=CLR_NAV)
         btns.add_widget(ok);
-        btns.add_widget(no)
-        content.add_widget(btns);
+        btns.add_widget(no);
+        content.add_widget(btns)
         p = Popup(title="?", content=content, size_hint=(0.6, 0.3))
-        no.bind(on_release=p.dismiss)
+        no.bind(on_release=p.dismiss);
         ok.bind(on_release=lambda x: [self.actual_delete(item), p.dismiss()]);
         p.open()
 
+    # --- ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ---
     def play_from_history(self, text):
-        _, e_d = self.get_paths()
-        p = os.path.join(e_d, f"{self._get_clean_filename(text)}.mp3")
+        _, e_d = self.get_paths();
+        p = os.path.join(e_d, f"{self._get_clean_filename(text)}.mp3");
         self._play_audio(p)
 
     def _play_audio(self, path):
         if os.path.exists(path):
             try:
-                pygame.mixer.music.load(path)
-                pygame.mixer.music.play()
+                pygame.mixer.music.load(path); pygame.mixer.music.play()
             except:
                 pass
 
     def _get_clean_filename(self, text):
+        """Очистка текста для использования в качестве имени файла"""
         return re.sub(r'[^\w\s\u10A0-\u10FF-]', '', text).strip()[:30]
 
     def get_paths(self):
+        """Получение путей к файлам в зависимости от выбранного языка"""
         c = LANG_CONFIG[self.target_lang_name]["code"]
         return f'dictionary_{c}.txt', f'exports_{c}'
 
     def open_lang_menu(self, *args):
+        """Окно выбора текущего языка обучения"""
         cnt = GridLayout(cols=1, spacing=dp(5), padding=dp(5))
         p = Popup(title="Выбор языка", content=cnt, size_hint=(0.7, 0.4))
         for l in LANG_CONFIG:
@@ -533,6 +572,7 @@ class TranslatorApp(App):
         self.load_dictionary()
 
     def filter_history(self, inst, val):
+        """Живой поиск по списку истории"""
         s = val.lower()
         for c in self.history_container.children:
             if s in f"{c.target_text} {c.rus_text}".lower():
@@ -540,9 +580,7 @@ class TranslatorApp(App):
                 c.opacity = 1;
                 c.disabled = False
             else:
-                c.height = 0;
-                c.opacity = 0;
-                c.disabled = True
+                c.height = 0; c.opacity = 0; c.disabled = True
 
     def set_gender(self, g):
         self.gender = g
@@ -554,6 +592,7 @@ class TranslatorApp(App):
         self.rus_input.text = ""
 
     def _safe_status(self, txt):
+        """Безопасное обновление текста статуса из другого потока"""
         Clock.schedule_once(lambda dt: setattr(self.status_label, 'text', txt))
 
 
